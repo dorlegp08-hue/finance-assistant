@@ -252,3 +252,30 @@ body{margin:0}
 .mobnav{display:none;flex:none;gap:4px;padding:6px 12px;border-bottom:1px solid var(--line);background:var(--bg);overflow-x:auto}
 .mobnav .tabb{height:40px;flex:none}
 .mobnav .tabb.on::after{bottom:0}
+
+/* Extended UI: Forecast, Transactions Explorer, Recurring, Security */
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
+.forecast-box{padding:24px;border-radius:18px;background:var(--tint);display:flex;flex-direction:column;gap:14px}
+.forecast-warn{padding:12px 18px;border-radius:12px;background:color-mix(in srgb,var(--neg) 14%,var(--card));color:var(--neg);font-weight:600;display:flex;align-items:center;gap:10px}
+.forecast-ok{padding:12px 18px;border-radius:12px;background:color-mix(in srgb,var(--pos) 14%,var(--card));color:var(--pos);font-weight:600;display:flex;align-items:center;gap:10px}
+
+.tx-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.tx-search{flex:1 1 200px;min-width:180px;height:42px;padding:0 14px;border-radius:21px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.tx-search:focus{outline:0;border-color:var(--accent)}
+.tx-list{display:flex;flex-direction:column}
+.tx-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--line);min-height:52px}
+.tx-row:first-child{border-top:0}
+.tx-date{font-family:'DM Mono',monospace;font-size:12px;color:var(--ink2);width:82px;flex:none}
+.tx-info{flex:1;min-width:0}
+.tx-note{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-cat{display:inline-block;font-size:11.5px;color:var(--ink2);margin-top:2px;font-family:'DM Mono',monospace}
+.tx-amt{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;text-align:right;white-space:nowrap}
+.tx-del{opacity:0.6;background:none;border:0;color:var(--ink2);cursor:pointer;padding:6px;border-radius:6px;display:flex;align-items:center}
+.tx-del:hover{opacity:1;color:var(--neg);background:var(--tint)}
+
+.rec-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.rec-item:first-child{border-top:0}
+
+.drawer{margin-top:16px;padding:20px;border-radius:16px;background:var(--bg);border:1px solid var(--line);display:flex;flex-direction:column;gap:14px;animation:dxIn .25s ease both}
+.health-pill{display:inline-flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--tint);color:var(--pos)}
+

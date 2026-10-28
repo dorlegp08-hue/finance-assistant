@@ -32,7 +32,63 @@
   const save = (key, ms, fn) => { clearTimeout(saveT[key]); saveT[key] = setTimeout(() => { if (USER) fn().catch((e) => { if (e.status !== 401) toast("Could not save. Is the server still running?"); }); }, ms); };
   const persist = () => save("prefs", 400, () => api("PUT", "/api/prefs", { prefs: { theme: S.theme, trim: S.trim, g1: S.g1, rng: S.rng, day: S.day, sav: S.sav } }));
   let D, DEFAULTS, page = "", palOpen = false, palQ = "", palIdx = 0, palList = [], palPrev = null, msgs = [], mid = 0, busy = false, toastT, futT = 24, rafQ = {}, palOutT, lastLeak, sStep, USER = null, SUM = null, delOpen = false, authMode = "login";
+  let FORECAST = null, RECURRING = null, TX_LIST = { rows: [], total: 0 }, txQ = "", addTxOpen = false, pwOpen = false, healthInfo = null;
   const later = (k, fn) => { if (rafQ[k]) return; rafQ[k] = requestAnimationFrame(() => { rafQ[k] = 0; fn(); }); };
+
+  async function loadSpendData() {
+    try {
+      const [fc, rec, txs] = await Promise.all([
+        api("GET", "/api/forecast").catch(() => null),
+        api("GET", "/api/transactions/recurring").catch(() => null),
+        api("GET", "/api/transactions?limit=30" + (txQ ? "&q=" + encodeURIComponent(txQ) : "")).catch(() => null)
+      ]);
+      if (fc && fc.forecast) FORECAST = fc.forecast;
+      if (rec && rec.recurring) RECURRING = rec.recurring;
+      if (txs) TX_LIST = txs;
+      if (page === "spend") draw(false);
+    } catch (e) {}
+  }
+
+  async function addManualTx(tx) {
+    try {
+      await api("POST", "/api/transactions", tx);
+      addTxOpen = false;
+      toast("Transaction added");
+      SUM = await api("GET", "/api/transactions/summary");
+      await loadSpendData();
+      draw(false);
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  async function deleteSingleTx(id) {
+    try {
+      await api("DELETE", `/api/transactions/${id}`);
+      toast("Transaction removed");
+      SUM = await api("GET", "/api/transactions/summary");
+      await loadSpendData();
+      draw(false);
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  async function exportUserData() {
+    try {
+      const pkg = await api("GET", "/api/user/export");
+      const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: "application/json" });
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = u;
+      a.download = `fathom-export-${(USER && USER.email ? USER.email : "user").replace(/[^a-zA-Z0-9]/g, "_")}.json`;
+      a.click();
+      URL.revokeObjectURL(u);
+      toast("Data export downloaded");
+    } catch (e) {
+      toast("Export failed: " + (e.message || e));
+    }
+  }
 
   // The user's numbers come from the server: their saved profile, or the demo defaults.
   function finalize(d) {
@@ -177,8 +233,99 @@
       cells += `<button type="button" class="hc ${E.heatLevel(daySpend(k), mx)}${sel === k ? " sel" : ""}" aria-label="${k} ${mname}, ${fmt(daySpend(k))}" aria-pressed="${sel === k}" data-day="${k}">${k}</button>`;
     }
     const subTotal = D.subs.reduce((a, s) => a + s.amt, 0), LK = leaksNow(), maxLeak = LK.length ? LK[0].amt || 1 : 1, nu = nUnused();
+    
+    const fcHtml = FORECAST ? `
+    <section class="sec">
+      <div>
+        <span class="eb">Cash Flow Projection</span>
+        <h2>30-day forecast.</h2>
+        <p class="lede">Simulates your daily spend and scheduled bill dates against your ${fmt(D.safety)} safety buffer.</p>
+      </div>
+      <div class="cd forecast-box">
+        <div class="grid3">
+          <div><span class="eb">Daily burn rate</span><div class="big" style="font-size:36px;margin-top:6px">~${fmt(FORECAST.dailyBurnRate)}</div><span class="muted" style="font-size:12px">estimated/day</span></div>
+          <div><span class="eb">In 30 days</span><div class="big" style="font-size:36px;margin-top:6px">${fmt(FORECAST.projectedEndBalance)}</div><span class="muted" style="font-size:12px">projected balance</span></div>
+          <div><span class="eb">Lowest point</span><div class="big" style="font-size:36px;margin-top:6px">${fmt(FORECAST.minProjectedBalance)}</div><span class="muted" style="font-size:12px">safety line is ${fmt(D.safety)}</span></div>
+        </div>
+        ${FORECAST.breachesSafety
+          ? `<div class="forecast-warn">${ico("M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z")} Heads up: Cash flow is projected to dip below your safety line (${fmt(D.safety)}).</div>`
+          : `<div class="forecast-ok">${ico(CHECK)} 30-day projection stays safely above your ${fmt(D.safety)} safety buffer.</div>`
+        }
+      </div>
+    </section>` : "";
+
+    const recList = Array.isArray(RECURRING) ? RECURRING : [];
+    const recHtml = recList.length ? `
+    <section class="sec">
+      <div>
+        <span class="eb">Detected recurring</span>
+        <h2>${recList.length} regular charge${recList.length > 1 ? "s" : ""}.</h2>
+        <p class="lede">Automatically discovered from cadence and descriptions in your transactions.</p>
+      </div>
+      <div class="cd" style="padding-top:20px;padding-bottom:20px">
+        ${recList.map((r) => `
+          <div class="rec-item">
+            <div>
+              <div style="font-size:16px;font-weight:600">${esc(r.merchant)}</div>
+              <div class="tx-cat">${esc(r.category)} · <span style="text-transform:capitalize">${esc(r.cadence)}</span> (${r.occurrences}x seen, latest ${esc(r.lastDate)})</div>
+            </div>
+            <div class="tx-amt" style="font-size:16px">~${fmt(r.estimatedAmount)}</div>
+          </div>
+        `).join("")}
+      </div>
+    </section>` : "";
+
+    const txRows = (TX_LIST && Array.isArray(TX_LIST.rows)) ? TX_LIST.rows : [];
+    const txHtml = `
+    <section class="sec">
+      <div>
+        <span class="eb">Transactions Ledger</span>
+        <h2>${TX_LIST.total || txRows.length} recorded.</h2>
+        <p class="lede">Search, review individual transactions, or manually log an expense.</p>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="ghost" data-act="toggleAddTx">${addTxOpen ? "Cancel" : "+ Add transaction"}</button>
+          <a href="/api/transactions/export" download class="ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">Export CSV</a>
+        </div>
+      </div>
+      <div class="cd">
+        ${addTxOpen ? `
+          <form id="addTxForm" class="drawer" style="margin-top:0;margin-bottom:20px">
+            <span class="eb">Log single transaction</span>
+            <div class="grid2">
+              <label class="fld"><span class="eb">Date</span><input class="inp" type="date" id="txDay" value="${D.today}" required></label>
+              <label class="fld"><span class="eb">Amount (₹)</span><input class="inp" type="number" step="any" min="0.01" id="txAmt" placeholder="e.g. 450" required></label>
+              <label class="fld"><span class="eb">Category</span><input class="inp" type="text" id="txCat" placeholder="e.g. Groceries, Dining" maxlength="40"></label>
+              <label class="fld"><span class="eb">Description</span><input class="inp" type="text" id="txNote" placeholder="e.g. Supermarket snacks" maxlength="80"></label>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+              <button type="button" class="ghost" data-act="toggleAddTx">Cancel</button>
+              <button type="submit" class="btn">Save transaction</button>
+            </div>
+          </form>
+        ` : ""}
+        <div class="tx-tools">
+          <input type="search" class="tx-search" id="txSearch" placeholder="Search notes or descriptions…" value="${esc(txQ)}">
+          <span class="muted mono" style="font-size:12px">${txRows.length} shown</span>
+        </div>
+        <div class="tx-list">
+          ${txRows.length ? txRows.map((t) => `
+            <div class="tx-row">
+              <span class="tx-date">${esc(t.day)}</span>
+              <div class="tx-info">
+                <div class="tx-note">${esc(t.note || t.category)}</div>
+                <span class="tx-cat">${esc(t.category)}</span>
+              </div>
+              <div class="tx-amt">${fmt(t.amount)}</div>
+              <button type="button" class="tx-del" data-act="delSingleTx:${t.id}" aria-label="Delete transaction" title="Delete transaction">${ico("M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16")}</button>
+            </div>
+          `).join("") : `<div class="muted say" style="padding:24px 0">No transactions match your search.</div>`}
+        </div>
+      </div>
+    </section>`;
+
     return `<div class="wrap">
     <div class="ph"><div><span class="eb">${mname} · so far</span><h1>Where it <em>went</em></h1></div><div class="big" style="font-size:72px">${fmt(total)}</div></div>
+    ${fcHtml}
     <section class="sec"><div><span class="eb">Every day</span><h2>${real ? "Your month, day by day." : "The pattern is weekends."}</h2><p class="lede">Darker days cost more. Tap one for the detail. ${real ? "From your imported transactions." : "This is a sample pattern until you import your transactions in Settings."}</p>
       <div class="legend" style="margin-top:20px"><span>less</span><i style="background:var(--bg);border:1px solid var(--line)"></i><i style="background:color-mix(in srgb,var(--accent) 16%,var(--card))"></i><i style="background:color-mix(in srgb,var(--accent) 36%,var(--card))"></i><i style="background:color-mix(in srgb,var(--accent) 62%,var(--card))"></i><i style="background:var(--accent)"></i><span>more</span></div></div>
       <div class="cd"><div class="heat">${E.DOW.map((d) => `<span class="hd">${d.toUpperCase()}</span>`).join("")}${cells}</div>
@@ -186,8 +333,10 @@
         <p class="say muted" style="max-width:260px;text-align:right">${diff >= 0 ? diff + "% above" : Math.abs(diff) + "% below"} your daily average of ${fmt(avg)}.</p></div></div></section>
     <section class="sec"><div><span class="eb">Flagged categories</span><h2>${LK.length ? (WORDS[LK.length] || LK.length) + " small leak" + (LK.length > 1 ? "s" : "") : "No leaks"}.</h2><p class="lede">Compared with your own usual month, not a made-up average.</p></div>
       <div class="cd" style="padding-top:20px;padding-bottom:20px">${LK.map((l, i) =>`<div class="lk"><div class="row"><span style="font-size:16.5px;font-weight:600">${esc(l.name)}</span><span class="mono" style="font-size:14px">${fmt(l.amt)}</span></div><div class="mono muted" style="font-size:12px;margin-top:4px">${esc(l.delta)} · worth ${fmt(l.plug)} a month${i === 0 && S.g1 && l.amt > guardAmt() ? ` · <span style="color:var(--neg)">over your ${fmt(guardAmt())} guardrail by ${fmt(l.amt - guardAmt())}</span>` : ""}</div><div class="bt"><div class="bf" style="width:${((l.amt / maxLeak) * 100).toFixed(1)}%;animation-delay:${200 + i * 110}ms"></div></div></div>`).join("")}</div></section>
+    ${recHtml}
     <section class="sec"><div><span class="eb">Subscriptions</span><h2>${fmt(subTotal)} a month.</h2><p class="lede">${S.trim ? `Pausing ${nu} of them saves ${fmt(D.trimGain)} a month` : `${nu} of ${D.subs.length} look unused`}.</p></div>
-      <div class="cd" style="padding-top:18px;padding-bottom:18px">${D.subs.map((s) => `<div class="subr"><span class="ic2">${esc(s.glyph || (s.name || "?")[0].toUpperCase())}</span><span style="flex:1;font-size:15.5px;font-weight:600">${esc(s.name)}${s.unused ? `<span class="tag">unopened 60 days</span>` : ""}</span><span class="mono" style="font-size:14px;width:90px;text-align:right">${fmt(s.amt)}</span>${s.unused ? `<button type="button" class="ghost ${S.trim ? "done" : ""}" aria-pressed="${S.trim}" data-act="trim" style="width:100px;justify-content:center">${S.trim ? "Paused" : "Pause"}</button>` : `<span class="muted mono" style="font-size:12px;width:100px;text-align:center">in use</span>`}</div>`).join("")}</div></section></div>`;
+      <div class="cd" style="padding-top:18px;padding-bottom:18px">${D.subs.map((s) => `<div class="subr"><span class="ic2">${esc(s.glyph || (s.name || "?")[0].toUpperCase())}</span><span style="flex:1;font-size:15.5px;font-weight:600">${esc(s.name)}${s.unused ? `<span class="tag">unopened 60 days</span>` : ""}</span><span class="mono" style="font-size:14px;width:90px;text-align:right">${fmt(s.amt)}</span>${s.unused ? `<button type="button" class="ghost ${S.trim ? "done" : ""}" aria-pressed="${S.trim}" data-act="trim" style="width:100px;justify-content:center">${S.trim ? "Paused" : "Pause"}</button>` : `<span class="muted mono" style="font-size:12px;width:100px;text-align:center">in use</span>`}</div>`).join("")}</div></section>
+    ${txHtml}</div>`;
   }
 
   // ---------- SETTINGS ----------
@@ -200,10 +349,58 @@
     ${sec("Subscriptions", "What you pay for.", "Tick “unopened” for ones you don’t use. Fathom offers to pause those.", rows("subs", (s, i) => `${fld("Name", `subs.${i}.name`, s.name, { type: "text", grow: 3 })}${fld("₹ a month", `subs.${i}.amt`, s.amt)}<label class="chk"><input type="checkbox" data-set="subs.${i}.unused" data-type="bool" ${s.unused ? "checked" : ""}> unopened 60 days</label>`) + `<button type="button" class="ghost" style="margin-top:14px" data-act="add:subs">Add subscription</button>`)}
     ${sec("Bills", "What leaves soon.", "Bills and automatic investments shown under Coming up.", rows("bills", (b, i) => `${fld("Date", `bills.${i}.when`, b.when, { type: "text" })}${fld("Name", `bills.${i}.name`, b.name, { type: "text", grow: 2 })}${fld("Note", `bills.${i}.sub`, b.sub, { type: "text" })}${fld("₹", `bills.${i}.amt`, b.amt)}`) + `<button type="button" class="ghost" style="margin-top:14px" data-act="add:bills">Add bill</button>`)}
     ${sec("Goals", "What you’re saving for.", "Leave unit empty for rupees, or write “months”.", rows("goals", (g, i) => `${fld("Name", `goals.${i}.name`, g.name, { type: "text", grow: 2 })}${fld("Saved so far", `goals.${i}.have`, g.have)}${fld("Target", `goals.${i}.need`, g.need)}${fld("Unit", `goals.${i}.unit`, g.unit || "", { type: "text" })}`) + `<button type="button" class="ghost" style="margin-top:14px" data-act="add:goals">Add goal</button>`)}
-    ${sec("Transactions", "Your real spending.", "Import a bank statement CSV (date, description, amount; negative amounts are spending). It replaces earlier imports and feeds the Spending page.", `<p class="say muted" style="margin-bottom:14px">${SUM && SUM.real ? `${SUM.count} transactions loaded.` : "No transactions yet. The Spending page shows a sample pattern."}</p><label class="ghost" for="csvFile" style="cursor:pointer">Choose CSV file</label><input type="file" id="csvFile" accept=".csv,text/csv,text/plain" class="sr">${SUM && SUM.real ? ` <button type="button" class="ghost" data-act="delTx">Delete all transactions</button>` : ""}`)}
-    ${sec("Account", "Signed in.", "Your data is stored in the database on the machine running Fathom.", `<p class="say" style="margin-bottom:14px"><b>${esc(USER ? USER.name : "")}</b> · ${esc(USER ? USER.email : "")}</p><button type="button" class="ghost" data-act="signout">Sign out</button> <button type="button" class="ghost" data-act="delAccount" aria-expanded="${delOpen}">Delete account</button>${delOpen ? `<div class="edit" style="margin-top:16px"><label class="fld"><span class="eb">Confirm with your password</span><input class="inp" type="password" id="delPw" autocomplete="current-password"></label><button type="button" class="ghost" data-act="delAccountGo" style="color:var(--neg)">Delete everything</button></div>` : ""}`)}
+    ${sec("Transactions", "Your real spending.", "Import a bank statement CSV (date, description, amount; negative amounts are spending). You can also export your history as CSV.", `
+      <p class="say muted" style="margin-bottom:14px">${SUM && SUM.real ? `${SUM.count} transactions loaded.` : "No transactions yet. The Spending page shows a sample pattern."}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label class="ghost" for="csvFile" style="cursor:pointer">Choose CSV file</label>
+        <input type="file" id="csvFile" accept=".csv,text/csv,text/plain" class="sr">
+        <a href="/api/transactions/export" download class="ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">Export CSV</a>
+        ${SUM && SUM.real ? `<button type="button" class="ghost" data-act="delTx">Delete all transactions</button>` : ""}
+      </div>
+    `)}
+    ${sec("Account & Security", "Signed in.", "Your credentials, sessions, and data portability.", `
+      <p class="say" style="margin-bottom:14px"><b>${esc(USER ? USER.name : "")}</b> · ${esc(USER ? USER.email : "")}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="ghost" data-act="togglePw" aria-expanded="${pwOpen}">Change password</button>
+        <button type="button" class="ghost" data-act="exportUser">Export all data (JSON)</button>
+        <button type="button" class="ghost" data-act="signout">Sign out</button>
+        <button type="button" class="ghost" data-act="signoutAll">Sign out all devices</button>
+        <button type="button" class="ghost" data-act="delAccount" aria-expanded="${delOpen}" style="color:var(--neg)">Delete account</button>
+      </div>
+      ${pwOpen ? `
+        <form id="pwForm" class="drawer">
+          <span class="eb">Change Password</span>
+          <div class="grid2">
+            <label class="fld"><span class="eb">Current Password</span><input class="inp" type="password" id="pwOld" required autocomplete="current-password"></label>
+            <label class="fld"><span class="eb">New Password (8+ chars)</span><input class="inp" type="password" id="pwNew" minlength="8" required autocomplete="new-password"></label>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="ghost" data-act="togglePw">Cancel</button>
+            <button type="submit" class="btn">Update password</button>
+          </div>
+        </form>
+      ` : ""}
+      ${delOpen ? `
+        <div class="drawer" style="border-color:var(--neg)">
+          <span class="eb" style="color:var(--neg)">Delete Account</span>
+          <p class="muted say">This permanently removes your account, chat history, transactions, and preferences from this server.</p>
+          <label class="fld"><span class="eb">Confirm with your password</span><input class="inp" type="password" id="delPw" autocomplete="current-password"></label>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="ghost" data-act="delAccount">Cancel</button>
+            <button type="button" class="btn" data-act="delAccountGo" style="background:var(--neg)">Delete everything</button>
+          </div>
+        </div>
+      ` : ""}
+    `)}
     ${sec("Motion", "How it moves.", "Full is the whole experience. Calm keeps soft fades and rolling numbers. Off stops all animation. First visit follows your system’s reduced-motion setting.", `<div class="rng" role="group" aria-label="Motion">${["full", "calm", "off"].map((m) => `<button type="button" class="rb ${Motion.cfg.mode === m ? "on" : ""}" aria-pressed="${Motion.cfg.mode === m}" data-act="motion:${m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join("")}</div><label class="chk" style="margin-top:14px"><input type="checkbox" data-motion="sound" ${Motion.cfg.sound ? "checked" : ""}> Soft sounds (off by default)</label>`)}
-    ${sec("AI", "Who answers in Chat.", "The provider, model and API key are set in config.json on the machine running the server. The key never reaches this page.", `<p class="say muted">Without a key, Chat still works with built-in wording.</p>`)}</div>`;
+    ${sec("System & AI", "Who answers & system status.", "The provider and API key are set in config.json on the machine running the server. The key never reaches this page.", `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <span class="health-pill">${ico(CHECK)} Server: ${healthInfo ? esc(healthInfo.status) : "online"}</span>
+        <span class="health-pill">AI: ${healthInfo ? esc(healthInfo.provider) : "configured"}</span>
+        ${healthInfo && healthInfo.uptime ? `<span class="health-pill">Uptime: ${Math.round(healthInfo.uptime)}s</span>` : ""}
+      </div>
+      <p class="say muted">Supports Google Gemini, OpenAI, Anthropic, Groq, and offline local Ollama. Without an API key, Chat uses local smart calculations.</p>
+    `)}</div>`;
   }
 
   // ---------- FUTURES ----------
@@ -420,7 +617,49 @@
   function runPal(i) { const it = palList[i]; if (!it) return; closePal(); it.run(); }
 
   // ---------- router and events ----------
-  const PAGES = { home: { html: homeHtml, bind: homeBind }, chat: { html: chatHtml, bind: chatBind }, spend: { html: spendHtml, bind: () => {} }, futures: { html: futHtml, bind: () => { updateFut(); } }, settings: { html: settingsHtml, bind: () => {} } };
+  function spendBind(root) {
+    const f = $("#addTxForm", root);
+    if (f) {
+      f.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const day = $("#txDay").value;
+        const amount = Number($("#txAmt").value);
+        const category = $("#txCat").value.trim() || "Other";
+        const note = $("#txNote").value.trim() || category;
+        addManualTx({ day, amount, category, note });
+      });
+    }
+  }
+
+  function settingsBind(root) {
+    const pf = $("#pwForm", root);
+    if (pf) {
+      pf.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const oldPassword = $("#pwOld").value;
+        const newPassword = $("#pwNew").value;
+        try {
+          await api("POST", "/api/auth/change-password", { oldPassword, newPassword });
+          pwOpen = false;
+          toast("Password updated successfully");
+          draw(false);
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+    }
+    if (!healthInfo) {
+      api("GET", "/api/health").then((h) => { healthInfo = h; draw(false); }).catch(() => {});
+    }
+  }
+
+  const PAGES = {
+    home: { html: homeHtml, bind: homeBind },
+    chat: { html: chatHtml, bind: chatBind },
+    spend: { html: spendHtml, bind: spendBind },
+    futures: { html: futHtml, bind: () => { updateFut(); } },
+    settings: { html: settingsHtml, bind: settingsBind }
+  };
   function draw(top) {
     const el = $("#page"), st = el.scrollTop;
     el.innerHTML = PAGES[page].html(); PAGES[page].bind(el, top); el.scrollTop = top ? 0 : st; Motion.enter(el, !!top);
@@ -431,6 +670,7 @@
     page = np; closePal();
     const tabs = TABS.map(([k, l]) => `<button type="button" class="tabb ${k === page ? "on" : ""}" data-go="${k}" ${k === page ? 'aria-current="page"' : ""}>${l}</button>`).join("");
     $("#tabs").innerHTML = tabs; $("#mobnav").innerHTML = tabs;
+    if (page === "spend" && (!FORECAST || !RECURRING)) loadSpendData();
     draw(true);
   }
   document.addEventListener("click", (e) => {
@@ -453,7 +693,22 @@
       return;
     }
     if (a === "signout") { api("POST", "/api/auth/logout", {}).catch(() => {}).then(() => { USER = null; showAuth(); }); return; }
-    if (a === "delTx") { api("DELETE", "/api/transactions").then(() => { SUM = { real: false }; toast("Transactions deleted"); draw(false); }).catch((x) => toast(x.message)); return; }
+    if (a === "signoutAll") { api("POST", "/api/auth/logout-all", {}).catch(() => {}).then(() => { USER = null; showAuth("Signed out of all devices."); }); return; }
+    if (a === "exportUser") return exportUserData();
+    if (a === "togglePw") { pwOpen = !pwOpen; return draw(false); }
+    if (a === "toggleAddTx") { addTxOpen = !addTxOpen; return draw(false); }
+    if (a.startsWith("delSingleTx:")) { const id = Number(a.split(":")[1]); return deleteSingleTx(id); }
+    if (a === "delTx") {
+      api("DELETE", "/api/transactions").then(() => {
+        SUM = { real: false };
+        FORECAST = null;
+        RECURRING = null;
+        TX_LIST = { rows: [], total: 0 };
+        toast("Transactions deleted");
+        draw(false);
+      }).catch((x) => toast(x.message));
+      return;
+    }
     if (a === "delAccount") { delOpen = !delOpen; return draw(false); }
     if (a === "delAccountGo") {
       api("POST", "/api/account/delete", { password: $("#delPw").value }).then(() => { USER = null; delOpen = false; showAuth("Your account and data were deleted."); }).catch((x) => toast(x.message));
@@ -474,6 +729,31 @@
   document.addEventListener("input", (e) => {
     const t = e.target;
     if (t.id === "dx-pq") { palQ = t.value; palIdx = 0; return palDraw(); }
+    if (t.id === "txSearch") {
+      clearTimeout(saveT["txSearch"]);
+      saveT["txSearch"] = setTimeout(async () => {
+        txQ = t.value.trim();
+        const r = await api("GET", "/api/transactions?limit=50&q=" + encodeURIComponent(txQ)).catch(() => null);
+        if (r) {
+          TX_LIST = r;
+          const box = $("#page .tx-list");
+          if (box) {
+            box.innerHTML = r.rows.length ? r.rows.map((txItem) => `
+              <div class="tx-row">
+                <span class="tx-date">${esc(txItem.day)}</span>
+                <div class="tx-info">
+                  <div class="tx-note">${esc(txItem.note || txItem.category)}</div>
+                  <span class="tx-cat">${esc(txItem.category)}</span>
+                </div>
+                <div class="tx-amt">${fmt(txItem.amount)}</div>
+                <button type="button" class="tx-del" data-act="delSingleTx:${txItem.id}" aria-label="Delete transaction" title="Delete transaction">${ico("M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16")}</button>
+              </div>
+            `).join("") : `<div class="muted say" style="padding:24px 0">No transactions match your search.</div>`;
+          }
+        }
+      }, 250);
+      return;
+    }
     const k = t.dataset && t.dataset.slider; if (!k) return;
     if (k === "cost") { const card = t.closest(".scn"), m = msgs.find((x) => x.id === +card.dataset.i); m.cost = +t.value; const st = Math.floor(m.cost / 5000); if (st !== m._st) { m._st = st; Motion.tick(); } later("c" + m.id, () => updateCard(card)); persistChat(); }
     else if (k === "sav") { S.sav = +t.value; persist(); const st = Math.floor(S.sav / 2500); if (st !== sStep) { sStep = st; Motion.tick(); } later("sav", updateFut); }
@@ -523,7 +803,10 @@
     if (file.size > 1800000) return toast("That file is too large (about 1.8 MB at most).");
     try {
       const r = await api("POST", "/api/transactions/import", { csv: await file.text() });
-      SUM = r.summary; toast(`Imported ${r.imported} spending rows${r.skipped ? `, skipped ${r.skipped}` : ""}`); draw(false);
+      SUM = r.summary;
+      await loadSpendData();
+      toast(`Imported ${r.imported} spending rows${r.skipped ? `, skipped ${r.skipped}` : ""}`);
+      draw(false);
     } catch (e) { toast(e.message); }
   }
 
@@ -560,11 +843,14 @@
   function startSession(s) {
     USER = s.user; Object.assign(S, s.prefs);
     D = loadProfile(s.profile, s.custom); if (S.sav == null) S.sav = D.saving;
-    SUM = null; page = ""; lastLeak = undefined; futT = 24; delOpen = false;
+    SUM = null; FORECAST = null; RECURRING = null; TX_LIST = { rows: [], total: 0 };
+    page = ""; lastLeak = undefined; futT = 24; delOpen = false; pwOpen = false; addTxOpen = false;
     setTheme(S.theme); loadChat(s.chat);
     $("#avatar").textContent = (USER.name || "?").trim()[0].toUpperCase();
     $("#dx-root").classList.remove("locked"); $("#auth").hidden = true; $("#auth").innerHTML = "";
     api("GET", "/api/transactions/summary").then((r) => { SUM = r; if (page === "spend" || page === "home") draw(false); }).catch(() => {});
+    loadSpendData();
+    api("GET", "/api/health").then((h) => { healthInfo = h; }).catch(() => {});
     route();
   }
 

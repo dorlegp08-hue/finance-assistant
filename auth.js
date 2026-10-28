@@ -84,4 +84,24 @@ function limiter(max, windowMs) {
   };
 }
 
-module.exports = { HttpError, signup, login, verifyPassword, createSession, destroySession, purgeExpired, userFrom, tokenOf, cookieHeader, clearCookieHeader, limiter, parseCookies };
+async function changePassword(db, uid, oldPassword, newPassword) {
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 200) {
+    throw new HttpError(400, "New password must be at least 8 characters.");
+  }
+  const ok = await verifyPassword(db, uid, oldPassword);
+  if (!ok) throw new HttpError(401, "Current password is incorrect.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = await hashPw(newPassword, salt);
+  db.prepare("UPDATE users SET salt = ?, hash = ? WHERE id = ?").run(salt, hash, uid);
+  return true;
+}
+
+function destroyAllSessions(db, uid) {
+  db.prepare("DELETE FROM sessions WHERE user_id = ?").run(uid);
+}
+
+module.exports = {
+  HttpError, signup, login, verifyPassword, changePassword,
+  createSession, destroySession, destroyAllSessions, purgeExpired,
+  userFrom, tokenOf, cookieHeader, clearCookieHeader, limiter, parseCookies
+};

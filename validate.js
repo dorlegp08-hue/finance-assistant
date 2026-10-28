@@ -48,4 +48,15 @@ function cleanChat(c) {
   }));
 }
 
-module.exports = { cleanProfile, cleanPrefs, cleanChat };
+function cleanTransaction(t) {
+  if (!t || typeof t !== "object") throw new HttpError(400, "Invalid transaction.");
+  const day = str(t.day, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new HttpError(400, "Date must be YYYY-MM-DD.");
+  const n = Number(t.amount);
+  if (!Number.isFinite(n) || n < 0.01 || n > 1e9) throw new HttpError(400, "Amount must be a positive number.");
+  const category = str(t.category || "Other", 40).trim() || "Other";
+  const note = str(t.note || "", 80).trim();
+  return { day, amount: Math.round(n * 100) / 100, category, note };
+}
+
+module.exports = { cleanProfile, cleanPrefs, cleanChat, cleanTransaction };

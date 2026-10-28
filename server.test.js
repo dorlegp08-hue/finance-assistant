@@ -121,17 +121,76 @@ server.listen(0, "127.0.0.1", async () => {
     assert.strictEqual(im.json.summary.categories[0].name, "Food delivery");
     assert.strictEqual((await api("GET", "/api/transactions/summary", undefined, ck2)).json.real, false, "other user sees nothing");
     assert.strictEqual((await api("POST", "/api/transactions/import", { csv: "nonsense" }, ck)).status, 400);
+    // health check
+    const health = await call(port, { path: "/api/health" });
+    assert.strictEqual(health.status, 200);
+    assert.strictEqual(health.json.status, "ok");
+
+    // transactions: CRUD, pagination, export, recurring, forecast
+    const txList = await api("GET", "/api/transactions?limit=10", undefined, ck);
+    assert.strictEqual(txList.status, 200);
+    assert.strictEqual(txList.json.total, 2);
+    assert.strictEqual(txList.json.rows.length, 2);
+
+    const newTx = await api("POST", "/api/transactions", { day: `${ym}-02`, amount: 1500, category: "Groceries", note: "Supermarket" }, ck);
+    assert.strictEqual(newTx.status, 201);
+    const createdId = newTx.json.transaction.id;
+    assert.ok(createdId > 0);
+
+    const updatedTx = await api("PUT", `/api/transactions/${createdId}`, { note: "Supermarket groceries" }, ck);
+    assert.strictEqual(updatedTx.status, 200);
+    assert.strictEqual(updatedTx.json.transaction.note, "Supermarket groceries");
+
+    const txExport = await call(port, { path: "/api/transactions/export", headers: { cookie: ck } });
+    assert.strictEqual(txExport.status, 200);
+    assert.ok(txExport.text.includes("Supermarket groceries"));
+
+    const forecastRes = await api("GET", "/api/forecast", undefined, ck);
+    assert.strictEqual(forecastRes.status, 200);
+    assert.ok(forecastRes.json.forecast.days.length === 30);
+
+    const recurringRes = await api("GET", "/api/transactions/recurring", undefined, ck);
+    assert.strictEqual(recurringRes.status, 200);
+    assert.ok(Array.isArray(recurringRes.json.recurring));
+
+    const userExport = await api("GET", "/api/user/export", undefined, ck);
+    assert.strictEqual(userExport.status, 200);
+    assert.strictEqual(userExport.json.user.email, "asha@example.com");
+    assert.ok(Array.isArray(userExport.json.transactions));
+
+    const delSingle = await api("DELETE", `/api/transactions/${createdId}`, undefined, ck);
+    assert.strictEqual(delSingle.status, 200);
+    assert.strictEqual(delSingle.json.ok, true);
+
+    // clear all transactions
     assert.strictEqual((await api("DELETE", "/api/transactions", undefined, ck)).json.deleted, 2);
+
+    // change password
+    assert.strictEqual((await api("POST", "/api/auth/change-password", { oldPassword: "wrong", newPassword: "new password 123" }, ck)).status, 401);
+    assert.strictEqual((await api("POST", "/api/auth/change-password", { oldPassword: "correct horse", newPassword: "new password 123" }, ck)).status, 200);
 
     // logout kills the session
     await api("POST", "/api/auth/logout", {}, ck2);
     assert.strictEqual((await api("GET", "/api/session", undefined, ck2)).status, 401);
 
+    // login with new password works
+    const relogin = await api("POST", "/api/auth/login", { email: "asha@example.com", password: "new password 123" });
+    assert.strictEqual(relogin.status, 200);
+    const newCk = cookieOf(relogin);
+
+    // logout all
+    assert.strictEqual((await api("POST", "/api/auth/logout-all", {}, newCk)).status, 200);
+    assert.strictEqual((await api("GET", "/api/session", undefined, newCk)).status, 401);
+
+    // re-login to delete account
+    const relogin2 = await api("POST", "/api/auth/login", { email: "asha@example.com", password: "new password 123" });
+    const finalCk = cookieOf(relogin2);
+
     // deleting an account needs the password and removes everything
-    assert.strictEqual((await api("POST", "/api/account/delete", { password: "nope nope" }, ck)).status, 401);
-    assert.strictEqual((await api("POST", "/api/account/delete", { password: "correct horse" }, ck)).status, 200);
-    assert.strictEqual((await api("GET", "/api/session", undefined, ck)).status, 401);
-    assert.strictEqual((await api("POST", "/api/auth/login", { email: "asha@example.com", password: "correct horse" })).status, 401);
+    assert.strictEqual((await api("POST", "/api/account/delete", { password: "nope nope" }, finalCk)).status, 401);
+    assert.strictEqual((await api("POST", "/api/account/delete", { password: "new password 123" }, finalCk)).status, 200);
+    assert.strictEqual((await api("GET", "/api/session", undefined, finalCk)).status, 401);
+    assert.strictEqual((await api("POST", "/api/auth/login", { email: "asha@example.com", password: "new password 123" })).status, 401);
     assert.strictEqual(server.db.prepare("SELECT COUNT(*) AS n FROM docs WHERE user_id = 1").get().n, 0, "docs removed with the account");
 
     // login throttling

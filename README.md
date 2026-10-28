@@ -24,14 +24,27 @@ Open http://localhost:3000 (Node 24, no installs). The server only listens on th
 
 | Route | Purpose |
 | --- | --- |
-| `POST /api/auth/signup`, `login`, `logout` | accounts |
+| `GET /api/health` | health probe (uptime, status, memory, provider) |
+| `POST /api/auth/signup`, `login`, `logout` | accounts & sessions |
+| `POST /api/auth/change-password` | change user password |
+| `POST /api/auth/logout-all` | revoke all active user sessions |
 | `GET /api/session` | who you are plus your profile, prefs and chat |
+| `GET /api/user/export` | full data export package (JSON) |
 | `PUT /api/profile`, `DELETE /api/profile` | your numbers (delete resets to demo) |
 | `PUT /api/prefs` | theme and view settings |
 | `PUT/DELETE /api/chat/history` | saved conversation |
-| `POST /api/chat` | ask the model (uses your stored numbers) |
+| `POST /api/chat` | ask the model (uses stored profile & real spending) |
 | `POST /api/scenario` | affordability maths |
-| `POST /api/transactions/import`, `GET /api/transactions/summary`, `DELETE /api/transactions` | spending data |
+| `GET /api/transactions` | paginated transactions with category, date & note filters |
+| `POST /api/transactions` | manually add a single transaction |
+| `PUT /api/transactions/:id` | update a single transaction (note / category / date / amount) |
+| `DELETE /api/transactions/:id` | delete an individual transaction |
+| `GET /api/transactions/export` | export transactions as downloadable CSV |
+| `POST /api/transactions/import` | bulk import bank statement CSV |
+| `GET /api/transactions/summary` | current month summary vs. 3-month baseline |
+| `GET /api/transactions/recurring`| automatic recurring subscriptions/bills detector |
+| `GET /api/forecast` | 30-day cash flow projection against safety reserves |
+| `DELETE /api/transactions` | delete all transactions |
 | `POST /api/account/delete` | delete the account and its data |
 
 ### Running it somewhere other than your own computer
@@ -44,12 +57,13 @@ Edit `config.json`:
 
 | field | meaning |
 | --- | --- |
-| `provider` | `"openai"` (any OpenAI-compatible API: OpenAI, Groq, OpenRouter, Ollama...) or `"anthropic"` |
+| `provider` | `"openai"`, `"anthropic"`, `"gemini"`, `"groq"`, or `"ollama"` (local offline) |
 | `apiKey` | your key, or set the `FATHOM_API_KEY` environment variable instead |
-| `baseUrl` | provider URL, e.g. `https://api.openai.com/v1` |
-| `model` | model name |
+| `baseUrl` | provider URL (e.g. `https://api.openai.com/v1`, `http://localhost:11434` for Ollama) |
+| `model` | model name (e.g. `gpt-4o-mini`, `gemini-1.5-flash`, `claude-3-5-haiku-20241022`, `llama3`) |
 
 `config.json` is git-ignored. The key stays on the server and never reaches the browser. No key? Chat still works with built-in wording.
+
 
 ## Your own numbers
 
