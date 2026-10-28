@@ -1,0 +1,113 @@
+/* Fathom motion: one signature (the sonar ring), everything else quiet.
+   Only transform and opacity are animated. Modes: full (default), calm (.motion-calm), off (.motion-off). */
+:root{--ease:cubic-bezier(.22,1,.36,1)}
+
+/* page enter: one soft cross-fade, only when you navigate (not on every re-render) */
+.wrap{animation:none}
+.wrap.enter{animation:dxFade .45s var(--ease) both}
+
+/* cards: soft light that follows the cursor, small lift */
+.cd{position:relative;transition:transform .5s var(--ease),box-shadow .5s var(--ease)}
+.sec .cd:hover,.rcpt .cd:hover{transform:translateY(-2px)}
+.cd::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s;background:radial-gradient(420px circle at var(--lx,50%) var(--ly,50%),color-mix(in srgb,var(--accent) 7%,transparent),transparent 70%)}
+.cd:hover::before{opacity:1}
+
+/* scroll reveal (class added by motion.js, removed after it settles) */
+.rv{opacity:0;transform:translateY(14px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.rv.in{opacity:1;transform:none}
+
+/* signature: sonar ring */
+.ring{--s:9;position:fixed;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--accent);pointer-events:none;z-index:60;animation:ringOut 1s var(--ease) forwards;will-change:transform,opacity}
+.ring.sm{--s:7;width:8px;height:8px;margin:-4px 0 0 -4px;border-width:1.5px;animation-duration:.9s}
+@keyframes ringOut{from{transform:scale(1);opacity:.55}to{transform:scale(var(--s));opacity:0}}
+.trail{position:fixed;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:var(--accent);opacity:.35;pointer-events:none;z-index:50;animation:trailOut .8s var(--ease) forwards}
+@keyframes trailOut{to{opacity:0;transform:scale(.3)}}
+
+/* charts draw themselves */
+.ln.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:dxDraw 1.15s var(--ease) .12s forwards}
+@keyframes dxDraw{to{stroke-dashoffset:0}}
+.ar.fadeup{animation:dxFade .9s var(--ease) .7s both}
+.mk.drop{animation:mkDrop .6s var(--ease) .95s backwards}
+@keyframes mkDrop{from{opacity:0}}
+
+/* highlighter stroke draws left to right */
+.hl{background-repeat:no-repeat;background-size:100% 100%;animation:hlDraw .9s var(--ease) .25s backwards}
+@keyframes hlDraw{from{background-size:0% 100%}}
+
+/* hero: tilt target, one sheen, logo nudge */
+.hp{transition:transform .6s var(--ease)}
+.hp::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%);transform:translateX(-120%);animation:sheen 1.6s var(--ease) .8s 1 forwards}
+@keyframes sheen{to{transform:translateX(120%)}}
+.logo{transition:transform .6s var(--ease)}
+.brand:hover .logo{transform:rotate(-8deg) scale(1.06)}
+
+/* progress bars fill like water, one sheen */
+.gbar i,.bf{position:relative;overflow:hidden}
+.gbar i::after,.bf::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-100%);animation:sheen 1.4s var(--ease) 1s 1 forwards}
+
+/* heatmap wave */
+.hc.wave{animation:hcIn .55s var(--ease) backwards}
+@keyframes hcIn{from{opacity:0;transform:scale(.6)}}
+
+/* check marks draw */
+.src .ok path,.toast svg path{stroke-dasharray:24;stroke-dashoffset:24;animation:dxTick .5s var(--ease) forwards}
+.src:nth-child(4) .ok path{animation-delay:.6s}.src:nth-child(5) .ok path{animation-delay:.8s}.src:nth-child(6) .ok path{animation-delay:1s}
+.toast svg path{animation-delay:.15s}
+@keyframes dxTick{to{stroke-dashoffset:0}}
+
+/* verdict pill pops once when the verdict changes */
+.pill.pop{animation:pillPop .6s var(--ease)}
+@keyframes pillPop{40%{transform:scale(1.08)}}
+
+/* futures milestones light up as the marker passes them */
+.ms>div{position:relative}
+.ms>div::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;border-radius:2px;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .7s var(--ease)}
+.ms>div.hit::after{transform:scaleX(1)}
+
+/* chat: bubble rises from the composer, card unfolds, words rise, thinking orb */
+.u{transform-origin:100% 100%;animation:bubbleIn .55s var(--ease) both}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(26px) scale(.95)}}
+.scn.unfold{animation:unfold .8s var(--ease) .35s both}
+@keyframes unfold{from{opacity:0;transform:translateY(16px) scale(.985)}}
+.w2{display:inline-block;animation:w2In .55s var(--ease) both}
+@keyframes w2In{from{opacity:0;transform:translateY(8px)}}
+.think::after{content:none}
+.think{display:flex;align-items:center;gap:12px}
+.orb{position:relative;width:26px;height:26px;flex:none}
+.orb::before{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--accent)}
+.orb i{position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--accent);opacity:0;animation:sonar 1.8s var(--ease) infinite}
+.orb i:nth-child(2){animation-delay:.9s}
+@keyframes sonar{from{transform:scale(.35);opacity:.6}to{transform:scale(1);opacity:0}}
+.send,.btn{transition:transform .2s,opacity .2s,translate .25s var(--ease)}
+
+/* palette materialises from the search bar and leaves the same way */
+.scrim{backdrop-filter:blur(5px)}
+.pal{transform-origin:var(--ox,50%) var(--oy,0);animation:palIn .5s var(--ease) both}
+@keyframes palIn{from{opacity:0;transform:translateX(-50%) scale(.9);filter:blur(10px)}to{opacity:1;transform:translateX(-50%) scale(1);filter:blur(0)}}
+.pal .pi.st{animation:dxIn .4s var(--ease) both;animation-delay:calc(var(--i,0) * 22ms + .12s)}
+#overlay.out .pal{animation:palOut .18s ease-in both}
+@keyframes palOut{to{opacity:0;transform:translateX(-50%) scale(.94);filter:blur(6px)}}
+#overlay.out .scrim{animation:dxFadeOut .18s both}
+@keyframes dxFadeOut{to{opacity:0}}
+
+/* theme change: colour grows out of the swatch you pressed */
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+::view-transition-new(root){animation:vtReveal .9s var(--ease) both}
+@keyframes vtReveal{from{clip-path:circle(0 at var(--vx,50%) var(--vy,0))}to{clip-path:circle(150vmax at var(--vx,50%) var(--vy,0))}}
+
+@media (prefers-reduced-transparency:reduce){.scrim{backdrop-filter:none}.pal{filter:none!important}}
+
+/* calm: soft fades and rolling numbers only */
+.motion-calm .rv{transform:translateY(6px)}
+.motion-calm .cd::before,.motion-calm .hp::after,.motion-calm .ring,.motion-calm .trail{display:none}
+.motion-calm .tk{animation:none}
+
+/* off: nothing moves */
+.motion-off *,.motion-off *::before,.motion-off *::after{animation:none!important;transition:none!important}
+
+/* system reduced motion: no keyframes, no travel; fades stay */
+@media (prefers-reduced-motion:reduce){
+  .dx *,.dx *::before,.dx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important}
+  .rv{transform:none}
+  .ring,.trail{display:none}
+}

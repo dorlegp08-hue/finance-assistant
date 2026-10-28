@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fathom · finance chat you can bend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="motion.css">
+</head>
+<body>
+<div class="dx th-pine locked" id="dx-root">
+  <header class="nav">
+    <div class="brand"><span class="logo">f</span>Fathom</div>
+    <nav class="tabs" aria-label="Main" id="tabs"></nav>
+    <span class="sp"></span>
+    <button type="button" class="askbar" id="openPal"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="t">Search or ask</span><span class="kbd">Ctrl K</span></button>
+    <div class="sw" role="group" aria-label="Colour theme" id="themes"></div>
+    <button type="button" class="avatar" id="avatar" data-go="settings" aria-label="Your account and settings">A</button>
+  </header>
+  <nav class="mobnav" aria-label="Main" id="mobnav"></nav>
+  <div class="page" id="page"></div>
+  <div class="auth" id="auth" hidden></div>
+  <div class="sr" id="live" aria-live="polite"></div>
+  <div id="overlay"></div>
+  <div id="toast"></div>
+</div>
+<script src="engine.js"></script>
+<script src="motion.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

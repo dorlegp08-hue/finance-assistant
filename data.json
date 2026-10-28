@@ -1,0 +1,42 @@
+{
+  "_note": "Demo data in rupees. Edit freely; every page and the chat read from here.",
+  "today": "auto",
+  "balance": 142000,
+  "safety": 38000,
+  "saving": 18500,
+  "trimGain": 1400,
+  "netWorth": 642300,
+  "runway": 4.1,
+  "growth": 0.08,
+  "ranges": [
+    { "k": "1W", "start": 628400, "amp": 2600, "word": "week" },
+    { "k": "1M", "start": 604100, "amp": 6500, "word": "month" },
+    { "k": "3M", "start": 552000, "amp": 14000, "word": "three months" },
+    { "k": "1Y", "start": 381000, "amp": 22000, "word": "year" }
+  ],
+  "leaks": [
+    { "name": "Food delivery", "amt": 9840, "delta": "+38% vs your usual", "plug": 2900 },
+    { "name": "Impulse shopping", "amt": 6480, "delta": "+64% vs your usual", "plug": 2200 },
+    { "name": "Cabs", "amt": 4260, "delta": "+12% vs your usual", "plug": 600 },
+    { "name": "Subscriptions", "amt": 3120, "delta": "Flat, but 2 of 6 unopened", "plug": 1400 }
+  ],
+  "subs": [
+    { "glyph": "V", "name": "Streaming video", "amt": 649 },
+    { "glyph": "M", "name": "Music", "amt": 119 },
+    { "glyph": "C", "name": "Cloud storage", "amt": 130 },
+    { "glyph": "D", "name": "Delivery membership", "amt": 822 },
+    { "glyph": "F", "name": "Fitness app", "amt": 799, "unused": true },
+    { "glyph": "L", "name": "Language app", "amt": 601, "unused": true }
+  ],
+  "bills": [
+    { "when": "1 Nov", "name": "Rent", "sub": "Auto-debit", "amt": 24000 },
+    { "when": "3 Nov", "name": "Electricity", "sub": "Due", "amt": 1860 },
+    { "when": "5 Nov", "name": "Index fund SIP", "sub": "Monthly", "amt": 8000 },
+    { "when": "7 Nov", "name": "Streaming video", "sub": "Renews", "amt": 649 }
+  ],
+  "goals": [
+    { "name": "Goa trip", "have": 49600, "need": 80000 },
+    { "name": "New laptop", "have": 33250, "need": 95000 },
+    { "name": "Emergency fund", "have": 4.1, "need": 6, "unit": "months" }
+  ]
+}
