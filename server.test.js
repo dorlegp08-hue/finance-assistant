@@ -38,7 +38,7 @@ const call = (port, o, body) => new Promise((resolve, reject) => {
 });
 const cookieOf = (r) => (r.headers["set-cookie"] || [""])[0].split(";")[0];
 
-const server = createServer({ dbPath: ":memory:" });
+const server = createServer({ dbPath: ":memory:", config: { provider: "openai", apiKey: "" } });
 server.listen(0, "127.0.0.1", async () => {
   const port = server.address().port;
   const api = (method, path, body, cookie, headers) => call(port, { method, path, headers: { ...(cookie ? { cookie } : {}), ...(headers || {}) } }, body);
@@ -140,6 +140,7 @@ server.listen(0, "127.0.0.1", async () => {
     const updatedTx = await api("PUT", `/api/transactions/${createdId}`, { note: "Supermarket groceries" }, ck);
     assert.strictEqual(updatedTx.status, 200);
     assert.strictEqual(updatedTx.json.transaction.note, "Supermarket groceries");
+    assert.strictEqual((await api("PUT", `/api/transactions/${createdId}`, { amount: -500 }, ck)).status, 400);
 
     const txExport = await call(port, { path: "/api/transactions/export", headers: { cookie: ck } });
     assert.strictEqual(txExport.status, 200);

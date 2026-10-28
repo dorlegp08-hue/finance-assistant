@@ -5,6 +5,7 @@
   "description": "Fathom: a finance chat you can bend. Plain code does the sums, the model explains them.",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning server.js",
     "test": "node modules.test.js && node engine.test.js && node --disable-warning=ExperimentalWarning server.test.js"
   },
   "engines": { "node": ">=18" }

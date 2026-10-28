@@ -105,6 +105,7 @@ function readJson(req, limit) {
 function createServer(opts) {
   opts = opts || {};
   const db = openDb(opts.dbPath || process.env.FATHOM_DB || path.join(__dirname, "fathom.db"));
+  const getConfig = () => (opts.config !== undefined ? opts.config : (opts.loadConfig ? opts.loadConfig() : loadConfig()));
   A.purgeExpired(db);
   const loginByIp = A.limiter(20, 15 * 60e3),
     loginByEmail = A.limiter(8, 15 * 60e3),
@@ -142,7 +143,7 @@ function createServer(opts) {
         status: "ok",
         uptime: Math.round(process.uptime()),
         version: "1.0.0",
-        provider: loadConfig().provider || "openai",
+        provider: getConfig().provider || "openai",
         memory: process.memoryUsage().rss
       });
     }
@@ -255,7 +256,7 @@ function createServer(opts) {
       const sum = summarize(rows, todayStr());
       let r;
       try {
-        r = await askModel(loadConfig(), String(b.question || ""), b.history, profileOf(uid), sum);
+        r = await askModel(getConfig(), String(b.question || ""), b.history, profileOf(uid), sum);
       } catch (e) {
         return send(res, 200, { error: e.message });
       }
@@ -315,7 +316,20 @@ function createServer(opts) {
       const txId = Number(txMatch[1]);
       if (method === "PUT") {
         const b = await readJson(req, 4000);
-        const updated = updateTransaction(db, uid, txId, b);
+        const updates = {};
+        if (b.day != null) {
+          const d = String(b.day).slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new HttpError(400, "Date must be YYYY-MM-DD.");
+          updates.day = d;
+        }
+        if (b.amount != null) {
+          const n = Number(b.amount);
+          if (!Number.isFinite(n) || n < 0.01 || n > 1e9) throw new HttpError(400, "Amount must be a positive number.");
+          updates.amount = Math.round(n * 100) / 100;
+        }
+        if (b.category != null) updates.category = String(b.category).trim().slice(0, 40) || "Other";
+        if (b.note != null) updates.note = String(b.note).trim().slice(0, 80);
+        const updated = updateTransaction(db, uid, txId, updates);
         if (!updated) throw new HttpError(404, "Transaction not found.");
         return send(res, 200, { transaction: updated });
       }

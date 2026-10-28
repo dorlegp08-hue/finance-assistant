@@ -56,6 +56,12 @@ assert.ok(fbNetWorth.text.includes("6,42,300"));
 const prompt = AI.systemPrompt({}, demoData, { real: true, categories: [{ name: "Dining", amt: 5000 }] });
 assert.ok(prompt.includes("142000"));
 assert.ok(prompt.includes("Dining"));
+
+// Error handling when key is missing
+assert.rejects(async () => {
+  await AI.askModel({ provider: "groq", apiKey: "" }, "hi", [], demoData, null);
+}, /Add your API key/);
+
 console.log("✓ ai.js passed");
 
 // ==========================================

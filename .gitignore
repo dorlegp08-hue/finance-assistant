@@ -3,3 +3,17 @@ config.json
 node_modules/
 fathom.db
 fathom.db-*
+npm-debug.log*
+
+# Python & virtual environment leftovers
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+eval/
+tests/
+
+# Editor & OS files
+.vscode/
+.DS_Store
+Thumbs.db

@@ -96,8 +96,14 @@ function localFallback(question, profile) {
 }
 
 async function askModel(cfg, question, history, profile, summary) {
-  const provider = (cfg.provider || "openai").toLowerCase();
-  const apiKey = cfg.apiKey || process.env.FATHOM_API_KEY;
+  let provider = (cfg.provider || "").toLowerCase();
+  const apiKey = cfg.apiKey || process.env.FATHOM_API_KEY || process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!provider) {
+    if (process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) provider = "groq";
+    else if (process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) provider = "gemini";
+    else if (process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) provider = "anthropic";
+    else provider = "openai";
+  }
   const isOllama = provider === "ollama";
 
   // If no API key configured and not local/ollama, report readable error
@@ -158,8 +164,23 @@ async function askModel(cfg, question, history, profile, summary) {
         stream: false,
         format: "json"
       };
+    } else if (provider === "groq") {
+      url = String(cfg.baseUrl || "https://api.groq.com/openai/v1").replace(/\/$/, "") + "/chat/completions";
+      headers = {
+        "content-type": "application/json",
+        Authorization: "Bearer " + apiKey
+      };
+      body = {
+        model: cfg.model || "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: sys },
+          ...cleanHistory,
+          { role: "user", content: question.slice(0, 1000) }
+        ],
+        response_format: { type: "json_object" }
+      };
     } else {
-      // OpenAI / Groq / OpenRouter / DeepSeek
+      // OpenAI / OpenRouter / DeepSeek
       url = String(cfg.baseUrl || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
       headers = {
         "content-type": "application/json",
